@@ -1,0 +1,19 @@
+<div>
+    <!-- Empty elements -->
+    <span></span>
+    <p></p>
+
+    <!-- Attribute with no value, single quotes, double quotes, unquoted -->
+    <input required type='text' class="a b c" tabindex=3>
+
+    <!-- Numeric and hex character references -->
+    <p>&#65;&#66;&#67; &#x41;&#x42;&#x43;</p>
+
+    <!-- Only whitespace text nodes (should be ignored) -->
+    <ul>
+        <li>real content</li>
+    </ul>
+
+    <!-- Script and style content (treated as text) -->
+    <style>.foo { color: red; }</style>
+</div>

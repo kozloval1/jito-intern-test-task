@@ -1,0 +1,94 @@
+AI conversation link:
+Research: https://gemini.google.com/share/c0bb106d3e7d
+
+Prompt: explain how to parse from html to json fixing nesting problem, with examples
+
+# How HTML → JSON Parsing Works in This Codebase
+
+Here's the approach — **no DOM, pure regex + stack**.
+
+---
+
+## The JSON Schema
+
+Every HTML construct maps to one of these node shapes:
+
+| HTML construct | JSON node |
+|---|---|
+| Root wrapper | `{ type: "root", children: [...] }` |
+| `<!DOCTYPE html>` | `{ type: "doctype", value: "html" }` |
+| `<!-- comment -->` | `{ type: "comment", value: "..." }` |
+| Text node | `{ type: "text", value: "..." }` |
+| Any element | `{ type: "element", tag, attributes, selfClosing, children }` |
+
+---
+
+## The Three-Step Pipeline
+
+### 1. Tokenize with a single regex
+
+```@c:\Users\sayna\coding\jito-intern-test-task\html2json.js:30
+const TOKEN = /<!--([\s\S]*?)-->|<!DOCTYPE([^>]*)>|<\/([a-z][a-z0-9:-]*)\s*>|<([a-z][a-z0-9:-]*)((?:\s(?:[^"'>/]|"[^"]*"|'[^']*')*)*)(\/?)\s*>|([^<]+)/gi;
+```
+
+One pass over the string, with 7 capture groups:
+- `m[1]` → comment content
+- `m[2]` → doctype value
+- `m[3]` → closing tag name
+- `m[4]` → opening tag name, `m[5]` → raw attributes, `m[6]` → self-close slash `/`
+- `m[7]` → raw text
+
+### 2. Build the tree with a stack
+
+```@c:\Users\sayna\coding\jito-intern-test-task\html2json.js:32-66
+const root = { type: "root", children: [] };
+const stack = [root];
+```
+
+- **Open tag** → create node, push onto stack (becomes the new "current parent")
+- **Close tag** → pop stack back to the matching tag
+- **Void/self-closing tags** (`<br>`, `<img>`, etc.) → never pushed, no `children` array
+- **Text/comment/doctype** → appended to whatever is on top of the stack
+
+### 3. Parse attributes separately
+
+Handles all three quoting styles (`"..."`, `'...'`, unquoted) and boolean attributes (e.g. `disabled` → `true`).
+
+---
+## Example
+
+Input:
+```html
+<div class="box">
+  <p>Hello &amp; world</p>
+</div>
+```
+
+Output:
+```json
+{
+  "type": "element",
+  "tag": "div",
+  "attributes": { "class": "box" },
+  "selfClosing": false,
+  "children": [
+    {
+      "type": "element",
+      "tag": "p",
+      "selfClosing": false,
+      "children": [{ "type": "text", "value": "Hello & world" }]
+    }
+  ]
+}
+```
+
+Note that `&amp;` → `&` is handled by `decodeEntities` function.
+
+---
+
+## Key Design Decisions
+
+- **No DOM parser** — works in any environment (Node, browser, etc.) without side effects
+- **Void tag set** — hard-coded list of HTML void elements that can never have children
+- **Lenient close-tag matching** — searches back through the stack rather than requiring perfectly balanced HTML, so malformed HTML still produces a reasonable tree
+- **Single root collapse** — if the result has exactly one top-level child, it's returned directly instead of wrapped in a `root` node (line 66)
